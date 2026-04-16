@@ -98,44 +98,47 @@ export function TableSection() {
 
   const exportExcel = () => {
     try {
-      const XLSX = require('xlsx')
       const headers = ['Nº', 'Data', 'Placa', 'Veículo', 'Motorista', 'Departamento', 'Destino', 'Finalidade', 'KM Inicial', 'KM Final', 'KM Percorrido', 'Combustível', 'Litros', 'Valor/Litro', 'Valor Total', 'KM/Litro', 'Posto', 'Observações']
-      const rows = (registros ?? [])?.map?.((r: Registro) => ({
-        'Nº': r?.numero ?? '',
-        'Data': formatDate(r?.data ?? ''),
-        'Placa': r?.placa ?? '',
-        'Veículo': r?.veiculo ?? '',
-        'Motorista': r?.motorista ?? '',
-        'Departamento': r?.departamento ?? '',
-        'Destino': r?.destino ?? '',
-        'Finalidade': r?.finalidade ?? '',
-        'KM Inicial': r?.kmInicial ?? 0,
-        'KM Final': r?.kmFinal ?? 0,
-        'KM Percorrido': r?.kmPercorrido ?? 0,
-        'Combustível': r?.combustivel ?? '',
-        'Litros': r?.litros ?? 0,
-        'Valor/Litro': r?.valorLitro ?? 0,
-        'Valor Total': r?.valorTotal ?? 0,
-        'KM/Litro': r?.kmLitro ?? 0,
-        'Posto': r?.posto ?? '',
-        'Observações': r?.observacoes ?? '',
-      })) ?? []
+      const rows = (registros ?? [])?.map?.((r: Registro) => [
+        r?.numero ?? '',
+        formatDate(r?.data ?? ''),
+        r?.placa ?? '',
+        r?.veiculo ?? '',
+        r?.motorista ?? '',
+        r?.departamento ?? '',
+        r?.destino ?? '',
+        r?.finalidade ?? '',
+        r?.kmInicial ?? 0,
+        r?.kmFinal ?? 0,
+        r?.kmPercorrido ?? 0,
+        r?.combustivel ?? '',
+        r?.litros ?? 0,
+        r?.valorLitro ?? 0,
+        r?.valorTotal ?? 0,
+        r?.kmLitro ?? 0,
+        r?.posto ?? '',
+        r?.observacoes ?? '',
+      ]) ?? []
 
-      const ws = XLSX.utils.json_to_sheet(rows, { header: headers })
+      const escapeCsv = (val: unknown) => {
+        const s = String(val ?? '')
+        if (s.includes(';') || s.includes('"') || s.includes('\n')) {
+          return `"${s.replace(/"/g, '""')}"`
+        }
+        return s
+      }
 
-      // Ajustar largura das colunas
-      ws['!cols'] = headers.map((h: string) => ({ wch: Math.max(h.length + 2, 14) }))
+      const bom = '\uFEFF'
+      const csv = bom + [headers, ...rows].map(row =>
+        (Array.isArray(row) ? row : Object.values(row)).map(escapeCsv).join(';')
+      ).join('\r\n')
 
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Registros')
-
-      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const url = URL?.createObjectURL?.(blob)
       const a = document?.createElement?.('a')
       if (a) {
         a.href = url ?? ''
-        a.download = `CIMAG_Controle_KM_Combustivel_${new Date()?.toISOString?.()?.split?.('T')?.[0] ?? 'export'}.xlsx`
+        a.download = `CIMAG_Controle_KM_Combustivel_${new Date()?.toISOString?.()?.split?.('T')?.[0] ?? 'export'}.csv`
         a?.click?.()
         URL?.revokeObjectURL?.(url)
       }
