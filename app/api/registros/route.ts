@@ -1,12 +1,12 @@
+export const runtime = 'edge'
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { db } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
   }
@@ -18,38 +18,33 @@ export async function GET(req: NextRequest) {
     const search = url.searchParams.get("search") ?? "";
     const skip = (page - 1) * limit;
 
-    const where = search
-      ? {
-          OR: [
-            { placa: { contains: search } },
-            { motorista: { contains: search } },
-            { veiculo: { contains: search } },
-            { departamento: { contains: search } },
-            { destino: { contains: search } },
-            { posto: { contains: search } },
-          ],
-        }
-      : {};
+    let whereSql = "";
+    const args: any[] = [];
 
-    const [registros, total] = await Promise.all([
-      prisma.registroKm.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
+    if (search) {
+      whereSql = "WHERE placa LIKE ? OR motorista LIKE ? OR veiculo LIKE ? OR departamento LIKE ? OR destino LIKE ? OR posto LIKE ?";
+      const pattern = `%${search}%`;
+      args.push(pattern, pattern, pattern, pattern, pattern, pattern);
+    }
+
+    const [registrosResult, countResult] = await Promise.all([
+      db.execute({
+        sql: `SELECT * FROM RegistroKm ${whereSql} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...args, limit, skip],
       }),
-      prisma.registroKm.count({ where }),
+      db.execute({
+        sql: `SELECT COUNT(*) as total FROM RegistroKm ${whereSql}`,
+        args,
+      }),
     ]);
 
+    const total = Number(countResult.rows[0]?.total ?? 0);
+
     return NextResponse.json({
-      registros: registros?.map((r: any) => ({
-        ...r,
-        data: r?.data?.toISOString?.() ?? "",
-        createdAt: r?.createdAt?.toISOString?.() ?? "",
-      })) ?? [],
-      total: total ?? 0,
+      registros: registrosResult.rows ?? [],
+      total,
       page,
-      totalPages: Math.ceil((total ?? 0) / limit),
+      totalPages: Math.ceil(total / limit),
     });
   } catch (error: any) {
     console.error("GET /api/registros error:", error);
@@ -58,7 +53,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
   }
@@ -82,41 +77,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get next numero
-    const lastRecord = await prisma.registroKm.findFirst({
-      orderBy: { numero: "desc" },
-      where: { numero: { not: null } },
+    const lastRecord = await db.execute({
+      sql: 'SELECT numero FROM RegistroKm WHERE numero IS NOT NULL ORDER BY numero DESC LIMIT 1',
+      args: [],
     });
-    const nextNumero = ((lastRecord?.numero ?? 0) + 1);
+    const nextNumero = (Number(lastRecord.rows[0]?.numero ?? 0) + 1);
 
-    const registro = await prisma.registroKm.create({
-      data: {
-        numero: nextNumero,
-        data: new Date(body?.data ?? new Date().toISOString()),
-        placa: body?.placa ?? "",
-        veiculo: body?.veiculo ?? "",
-        motorista: body?.motorista ?? "",
-        departamento: body?.departamento ?? "",
-        destino: body?.destino ?? "",
-        finalidade: body?.finalidade ?? "",
-        kmInicial,
-        kmFinal,
-        kmPercorrido,
-        combustivel: body?.combustivel ?? "",
-        litros,
-        valorLitro,
-        valorTotal,
-        kmLitro,
-        posto: body?.posto ?? null,
-        observacoes: body?.observacoes ?? null,
-      },
+    const now = new Date().toISOString();
+    const dataValue = body?.data ? new Date(body.data).toISOString() : now;
+
+    await db.execute({
+      sql: `INSERT INTO RegistroKm (numero, data, placa, veiculo, motorista, departamento, destino, finalidade, kmInicial, kmFinal, kmPercorrido, combustivel, litros, valorLitro, valorTotal, kmLitro, posto, observacoes, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        nextNumero, dataValue, body?.placa ?? "", body?.veiculo ?? "",
+        body?.motorista ?? "", body?.departamento ?? "", body?.destino ?? "",
+        body?.finalidade ?? "", kmInicial, kmFinal, kmPercorrido,
+        body?.combustivel ?? "", litros, valorLitro, valorTotal, kmLitro,
+        body?.posto ?? null, body?.observacoes ?? null, now,
+      ],
     });
 
-    return NextResponse.json({
-      ...registro,
-      data: registro?.data?.toISOString?.() ?? "",
-      createdAt: registro?.createdAt?.toISOString?.() ?? "",
-    }, { status: 201 });
+    const inserted = await db.execute({
+      sql: 'SELECT * FROM RegistroKm WHERE numero = ?',
+      args: [nextNumero],
+    });
+
+    return NextResponse.json(inserted.rows[0] ?? {}, { status: 201 });
   } catch (error: any) {
     console.error("POST /api/registros error:", error);
     return NextResponse.json(

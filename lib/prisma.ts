@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+import { createClient } from '@libsql/client/web'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+export const db = createClient({
+  url: process.env.TURSO_DATABASE_URL || 'http://127.0.0.1:8080',
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})

@@ -1,26 +1,27 @@
+export const runtime = 'edge'
+
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { getSession } from '@/lib/auth'
+import { db } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { generatePassword, sendWelcomeEmail } from '@/lib/email'
 
-export async function GET() {
-  const session = await getServerSession(authOptions)
+export async function GET(req: NextRequest) {
+  const session = await getSession(req)
   if (!session || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
   }
 
-  const users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
-    orderBy: { createdAt: 'desc' },
+  const result = await db.execute({
+    sql: 'SELECT id, name, email, role, createdAt FROM User ORDER BY createdAt DESC',
+    args: [],
   })
 
-  return NextResponse.json(users)
+  return NextResponse.json(result.rows)
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession(req)
   if (!session || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
   }
@@ -32,25 +33,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Nome e email são obrigatórios' }, { status: 400 })
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing) {
+  const existing = await db.execute({
+    sql: 'SELECT id FROM User WHERE email = ?',
+    args: [email],
+  })
+  if (existing.rows.length > 0) {
     return NextResponse.json({ error: 'Email já cadastrado' }, { status: 400 })
   }
 
   const plainPassword = generatePassword()
   const hashedPassword = await bcrypt.hash(plainPassword, 10)
+  const now = new Date().toISOString()
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword,
-      role: role || 'user',
-    },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  await db.execute({
+    sql: 'INSERT INTO User (name, email, password, role, createdAt) VALUES (?, ?, ?, ?, ?)',
+    args: [name, email, hashedPassword, role || 'user', now],
   })
 
-  // Enviar email com credenciais
+  const inserted = await db.execute({
+    sql: 'SELECT id, name, email, role, createdAt FROM User WHERE email = ?',
+    args: [email],
+  })
+  const user = inserted.rows[0]
+
   let emailSent = false
   try {
     await sendWelcomeEmail(email, name, plainPassword)

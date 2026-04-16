@@ -3,6 +3,7 @@ import { StatsCards } from '@/components/stats-cards'
 import { FormSection } from '@/components/form-section'
 import { TableSection } from '@/components/table-section'
 
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 export default function HomePage() {

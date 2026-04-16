@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -23,18 +22,23 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    })
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
 
-    if (result?.error) {
-      setError('Email ou senha incorretos')
+      if (res.ok) {
+        router.push('/')
+        router.refresh()
+      } else {
+        setError('Email ou senha incorretos')
+      }
+    } catch {
+      setError('Erro ao fazer login')
+    } finally {
       setLoading(false)
-    } else if (result?.ok) {
-      router.push('/')
-      router.refresh()
     }
   }
 

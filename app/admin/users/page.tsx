@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/components/auth-provider'
 import { useRouter } from 'next/navigation'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,7 @@ type UserType = {
 }
 
 export default function AdminUsersPage() {
-  const { data: session, status } = useSession()
+  const { user: sessionUser, status } = useSession()
   const router = useRouter()
   const [users, setUsers] = useState<UserType[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,16 +48,16 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login')
-    } else if (session?.user?.role !== 'admin' && status === 'authenticated') {
+    } else if (sessionUser?.role !== 'admin' && status === 'authenticated') {
       router.push('/')
     }
-  }, [session, status, router])
+  }, [sessionUser, status, router])
 
   useEffect(() => {
-    if (session?.user?.role === 'admin') {
+    if (sessionUser?.role === 'admin') {
       fetchUsers()
     }
-  }, [session])
+  }, [sessionUser])
 
   async function fetchUsers() {
     try {
@@ -135,7 +135,7 @@ export default function AdminUsersPage() {
     )
   }
 
-  if (session?.user?.role !== 'admin') return null
+  if (sessionUser?.role !== 'admin') return null
 
   return (
     <div className="min-h-screen bg-background">
@@ -236,7 +236,7 @@ export default function AdminUsersPage() {
                       {new Date(user.createdAt).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell>
-                      {String(user.id) !== session?.user?.id && (
+                      {String(user.id) !== sessionUser?.id && (
                         <Button
                           variant="ghost"
                           size="icon"

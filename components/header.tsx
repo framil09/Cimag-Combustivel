@@ -3,12 +3,20 @@
 import { Fuel, LogOut, Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from '@/components/auth-provider'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
 export function Header() {
-  const { data: session } = useSession()
+  const { user } = useSession()
+  const router = useRouter()
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-gradient-to-r from-[#0D3640] via-[#1B4D5C] to-[#2A7A8A] shadow-lg">
@@ -38,7 +46,7 @@ export function Header() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {session?.user?.role === 'admin' && (
+          {user?.role === 'admin' && (
             <Link href="/admin/users">
               <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10">
                 <Settings className="w-4 h-4 mr-1.5" />
@@ -48,13 +56,13 @@ export function Header() {
           )}
           <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-white/80 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-full">
             <Fuel className="w-3.5 h-3.5" />
-            <span>{session?.user?.name || 'Combustível'}</span>
+            <span>{user?.name || 'Combustível'}</span>
           </div>
-          {session && (
+          {user && (
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => signOut({ callbackUrl: '/login' })}
+              onClick={handleLogout}
               className="text-white/70 hover:text-white hover:bg-white/10"
               title="Sair"
             >

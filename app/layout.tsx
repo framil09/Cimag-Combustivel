@@ -12,7 +12,7 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mon
 export const metadata = {
   title: 'CIMAG - Controle de KM e Combustível',
   description: 'Sistema de controle colaborativo de quilometragem e combustível do CIMAG',
-  metadataBase: new URL(process.env.NEXTAUTH_URL || 'http://localhost:3000'),
+  metadataBase: new URL(process.env.APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000'),
   icons: {
     icon: '/logo-cimag.png',
     shortcut: '/logo-cimag.png',
