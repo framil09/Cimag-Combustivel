@@ -8,9 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "pages:build": "npx @opennextjs/cloudflare build --dangerouslyUseUnsupportedNextVersion",
-    "deploy": "npx wrangler pages deploy .open-next/assets --project-name cimag-combustivel",
-    "preview": "npx wrangler dev",
+    "pages:build": "opennextjs-cloudflare build --dangerouslyUseUnsupportedNextVersion",
+    "deploy": "wrangler pages deploy .open-next/assets --project-name cimag-combustivel",
+    "preview": "wrangler dev",
     "seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {
