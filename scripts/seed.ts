@@ -1,14 +1,42 @@
-import { createClient } from '@libsql/client'
 import bcrypt from 'bcryptjs'
 
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-})
+// Simple Turso HTTP client for seeding
+async function execute(url: string, authToken: string, sql: string, args: any[] = []) {
+  const fmtArgs = args.map((a) => {
+    if (a === null || a === undefined) return { type: 'null', value: null }
+    if (typeof a === 'number') return Number.isInteger(a) ? { type: 'integer', value: String(a) } : { type: 'float', value: a }
+    return { type: 'text', value: String(a) }
+  })
+  const res = await fetch(`${url}/v3/pipeline`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql, args: fmtArgs } }, { type: 'close' }] }),
+  })
+  if (!res.ok) throw new Error(`Turso error ${res.status}: ${await res.text()}`)
+  const data = await res.json() as any
+  const result = data.results?.[0]
+  if (result?.type === 'error') throw new Error(`SQL error: ${result.error?.message}`)
+  const response = result?.response?.result
+  if (!response) return { rows: [] as any[], rowsAffected: 0 }
+  const cols = response.cols?.map((c: any) => c.name) || []
+  const rows = (response.rows || []).map((row: any[]) => {
+    const obj: Record<string, any> = {}
+    row.forEach((cell: any, i: number) => { obj[cols[i]] = cell.type === 'null' ? null : cell.value })
+    return obj
+  })
+  return { rows, rowsAffected: response.affected_row_count || 0 }
+}
+
+const dbUrl = process.env.TURSO_DATABASE_URL!
+const dbToken = process.env.TURSO_AUTH_TOKEN!
+
+async function db(sql: string, args: any[] = []) {
+  return execute(dbUrl, dbToken, sql, args)
+}
 
 async function main() {
   // Create tables if not exist
-  await db.execute(`
+  await db(`
     CREATE TABLE IF NOT EXISTS User (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -19,7 +47,7 @@ async function main() {
     )
   `)
 
-  await db.execute(`
+  await db(`
     CREATE TABLE IF NOT EXISTS RegistroKm (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       numero INTEGER NOT NULL,
@@ -44,16 +72,13 @@ async function main() {
     )
   `)
 
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_registro_data ON RegistroKm(data)`)
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_registro_placa ON RegistroKm(placa)`)
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_registro_motorista ON RegistroKm(motorista)`)
+  await db(`CREATE INDEX IF NOT EXISTS idx_registro_data ON RegistroKm(data)`)
+  await db(`CREATE INDEX IF NOT EXISTS idx_registro_placa ON RegistroKm(placa)`)
+  await db(`CREATE INDEX IF NOT EXISTS idx_registro_motorista ON RegistroKm(motorista)`)
 
   const adminEmail = 'admin@cimag.com'
 
-  const existing = await db.execute({
-    sql: 'SELECT id FROM User WHERE email = ?',
-    args: [adminEmail],
-  })
+  const existing = await db('SELECT id FROM User WHERE email = ?', [adminEmail])
 
   if (existing.rows.length > 0) {
     console.log('Admin já existe:', adminEmail)
@@ -63,10 +88,10 @@ async function main() {
   const hashedPassword = await bcrypt.hash('admin123', 10)
   const now = new Date().toISOString()
 
-  await db.execute({
-    sql: 'INSERT INTO User (name, email, password, role, createdAt) VALUES (?, ?, ?, ?, ?)',
-    args: ['Administrador', adminEmail, hashedPassword, 'admin', now],
-  })
+  await db(
+    'INSERT INTO User (name, email, password, role, createdAt) VALUES (?, ?, ?, ?, ?)',
+    ['Administrador', adminEmail, hashedPassword, 'admin', now],
+  )
 
   console.log('Admin criado com sucesso!')
   console.log('Email:', adminEmail)
